@@ -1,0 +1,120 @@
+# Default configuration for Axon IA
+
+data:
+  # Root directory containing training, validation, and test data
+  root_dir: "./data"
+  
+  # Input image modalities to use
+  modalities: ["flair", "t1", "t2", "dwi"]
+  
+  # Target segmentation labels
+  target: "mask"
+  
+  # Data loading parameters
+  batch_size: 2
+  num_workers: 4
+  
+  # Data preprocessing
+  preprocessing:
+    spacing: [1.0, 1.0, 1.0]  # Target spacing in mm
+    orientation: "RAS"         # Target orientation
+    crop_foreground: true      # Whether to crop to foreground
+    normalize_mode: "z_score"  # Normalization mode: z_score, percentile, min_max
+    
+  # Data augmentation
+  augmentation:
+    enabled: true
+    rotation_range: 15         # Degrees
+    scale_range: [0.85, 1.15]  # Scale factors
+    flip_prob: 0.5
+    elastic_prob: 0.3
+    noise_prob: 0.2
+    bias_prob: 0.3
+    gamma_prob: 0.3
+
+model:
+  # Model architecture: unetr, swin_unetr, nnunet, segresnet
+  architecture: "swin_unetr"
+  
+  # Model parameters
+  params:
+    img_size: [128, 128, 128]
+    in_channels: 4
+    out_channels: 1
+    feature_size: 48
+    use_deep_supervision: true
+    use_attention_gates: true
+    
+loss:
+  # Loss function type: dice, dice_ce, focal, combo, boundary
+  type: "dice_ce"
+  
+  # Loss function parameters
+  params:
+    include_background: false
+    ce_weight: 1.0
+    dice_weight: 1.0
+    
+optimizer:
+  # Optimizer type: adam, adamw, sgd
+  type: "adamw"
+  learning_rate: 1e-4
+  weight_decay: 0.01
+  
+scheduler:
+  # Learning rate scheduler
+  use_scheduler: true
+  type: "cosine"  # cosine, polynomial, step, plateau
+  params:
+    warmup_epochs: 5
+    min_lr: 1e-6
+    
+training:
+  # Training parameters
+  epochs: 300
+  output_dir: "./outputs"
+  use_amp: true             # Use automatic mixed precision
+  grad_clip: 1.0            # Gradient clipping value
+  val_interval: 1           # Validation interval in epochs
+  log_interval: 10          # Logging interval in iterations
+  
+callbacks:
+  # Early stopping
+  early_stopping:
+    enabled: true
+    monitor: "val_dice"
+    patience: 20
+    mode: "max"
+    
+  # Model checkpoint
+  model_checkpoint:
+    enabled: true
+    monitor: "val_dice"
+    save_best_only: true
+    mode: "max"
+    
+  # TensorBoard logging
+  tensorboard:
+    enabled: true
+    log_freq: 1
+    
+  # Weights & Biases logging
+  wandb:
+    enabled: false
+    project_name: "axon_ia"
+    
+inference:
+  # Inference parameters
+  sliding_window_size: [128, 128, 128]
+  overlap: 0.5
+  use_test_time_augmentation: true
+  batch_size: 4
+  
+  # Postprocessing parameters
+  postprocessing:
+    threshold: 0.5
+    remove_small_objects: true
+    min_size: 100
+    fill_holes: true
+    max_hole_size: 50
+    largest_cc_only: false

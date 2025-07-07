@@ -1,0 +1,75 @@
+# UNETR Training Configuration
+
+data:
+  root_dir: "./data"
+  modalities: ["flair", "t1", "t2", "dwi"]
+  target: "mask"
+  batch_size: 2
+  num_workers: 4
+  dataset_params:
+    transform: "train"
+    preload: false
+  preprocessing:
+    spacing: [1.0, 1.0, 1.0]
+    orientation: "RAS"
+    crop_foreground: true
+    normalize_mode: "z_score"
+
+model:
+  architecture: "unetr"
+  params:
+    in_channels: 4
+    out_channels: 1
+    img_size: [128, 128, 128]
+    feature_size: 16
+    hidden_size: 768
+    mlp_dim: 3072
+    num_heads: 12
+    dropout_rate: 0.0
+    use_deep_supervision: true
+
+loss:
+  type: "dice_ce"
+  params:
+    include_background: false
+    ce_weight: 1.0
+    dice_weight: 1.0
+
+optimizer:
+  type: "adamw"
+  learning_rate: 1e-4
+  weight_decay: 0.01
+
+scheduler:
+  use_scheduler: true
+  type: "cosine_warmup"
+  params:
+    warmup_epochs: 10
+    min_lr: 1e-6
+
+training:
+  epochs: 300
+  output_dir: "./outputs/unetr"
+  use_amp: true
+  grad_clip: 1.0
+  val_interval: 1
+  log_interval: 10
+
+callbacks:
+  early_stopping:
+    enabled: true
+    monitor: "val_dice"
+    patience: 20
+    mode: "max"
+  model_checkpoint:
+    enabled: true
+    monitor: "val_dice"
+    save_best_only: true
+    mode: "max"
+  tensorboard:
+    enabled: true
+    log_freq: 1
+  wandb:
+    enabled: false
+    project_name: "axon_ia"
+    run_name: "unetr_run"

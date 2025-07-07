@@ -1,0 +1,58 @@
+version: '3'
+
+services:
+  axon_ia:
+    build: .
+    image: axon_ia:latest
+    container_name: axon_ia
+    volumes:
+      - ./:/app
+      - ${DATA_DIR:-./data}:/app/data
+      - ${OUTPUT_DIR:-./outputs}:/app/outputs
+    environment:
+      - PYTHONPATH=/app
+      - NVIDIA_VISIBLE_DEVICES=${GPU_ID:-all}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    command: bash
+    tty: true
+    stdin_open: true
+
+  tensorboard:
+    image: axon_ia:latest
+    container_name: axon_ia_tensorboard
+    depends_on:
+      - axon_ia
+    volumes:
+      - ${OUTPUT_DIR:-./outputs}:/app/outputs
+    ports:
+      - "6006:6006"
+    command: tensorboard --logdir /app/outputs --host 0.0.0.0
+    restart: unless-stopped
+
+  jupyter:
+    image: axon_ia:latest
+    container_name: axon_ia_jupyter
+    depends_on:
+      - axon_ia
+    volumes:
+      - ./:/app
+      - ${DATA_DIR:-./data}:/app/data
+      - ${OUTPUT_DIR:-./outputs}:/app/outputs
+    ports:
+      - "8888:8888"
+    environment:
+      - PYTHONPATH=/app
+      - NVIDIA_VISIBLE_DEVICES=${GPU_ID:-all}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    command: jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''
+    restart: unless-stopped
