@@ -2,13 +2,22 @@
 
 data:
   # Root directory containing training, validation, and test data
-  root_dir: "./data"
+  root_dir: "C:/development/data/axon_ia"
+
+  # Training data directory
+  train_dir: "C:/development/data/axon_ia/train"
+
+  # Validation data directory
+  val_dir: "C:/development/data/axon_ia/validation"
+
+  # Output directory for processed data
+  output_dir: "C:/development/data/axon_ia/processed"
   
   # Input image modalities to use
-  modalities: ["flair", "t1", "t2", "dwi"]
+  modalities: ["flair", "b0", "t2star", "b1000"]
   
   # Target segmentation labels
-  target: "mask"
+  target: "perfroi"
   
   # Data loading parameters
   batch_size: 2
@@ -71,7 +80,7 @@ scheduler:
     
 training:
   # Training parameters
-  epochs: 300
+  epochs: 20
   output_dir: "./outputs"
   use_amp: true             # Use automatic mixed precision
   grad_clip: 1.0            # Gradient clipping value
