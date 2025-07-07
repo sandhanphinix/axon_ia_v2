@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple, Union, Callable
 import numpy as np
 import torch
 from monai.transforms import (
-    Compose, LoadNifti, Orientation, Spacing, Resize,
+    Compose, LoadImage, Orientation, Spacing, Resize,
     RandRotate, RandFlip, RandZoom, RandGaussianNoise,
     NormalizeIntensity, ScaleIntensity, CropForeground,
     SpatialPad, RandSpatialCrop, ToTensor
