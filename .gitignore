@@ -68,7 +68,7 @@ Pipfile.lock
 .vscode/
 
 # Environments
-env/
+env*/
 venv/
 ENV/
 env.bak/
