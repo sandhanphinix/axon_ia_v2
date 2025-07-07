@@ -30,47 +30,57 @@ from axon_ia.data.preprocessing import (
     crop_foreground,
     standardize_orientation
 )
+from axon_ia.config.config_parser import ConfigParser
 
 
 def parse_args():
-    """Parse command line arguments."""
+    """Parse command line arguments, using defaults from default_config.yaml if not provided."""
+    # Load default config
+    default_config_path = "axon_ia/config/default_config.yaml"
+    config = ConfigParser(default_config_path)
+    data_config = config.get("data", {})
+    preprocessing_config = data_config.get("preprocessing", {})
+
     parser = argparse.ArgumentParser(description="Prepare data for training")
-    
-    parser.add_argument("--input-dir", type=str, required=True,
+
+    parser.add_argument("--input-dir", type=str, required=False,
+                        default=data_config.get("train_dir", None),
                         help="Directory containing raw data")
-    
-    parser.add_argument("--output-dir", type=str, required=True,
+
+    parser.add_argument("--output-dir", type=str, required=False,
+                        default=data_config.get("output_dir", None),
                         help="Directory to save processed data")
-    
+
     parser.add_argument("--config", type=str,
+                        default="axon_ia/config/default_config.yaml",
                         help="Path to config YAML file with preprocessing parameters")
-    
-    parser.add_argument("--modalities", type=str, nargs="+", 
-                        default=["flair", "t1", "t2", "dwi"],
+
+    parser.add_argument("--modalities", type=str, nargs="+",
+                        default=data_config.get("modalities", None),
                         help="List of modalities to process")
-    
-    parser.add_argument("--target", type=str, default="mask",
+
+    parser.add_argument("--target", type=str, default=data_config.get("target", None),
                         help="Name of the segmentation target")
-    
-    parser.add_argument("--spacing", type=float, nargs=3, default=[1.0, 1.0, 1.0],
+
+    parser.add_argument("--spacing", type=float, nargs=3, default=preprocessing_config.get("spacing", [1.0, 1.0, 1.0]),
                         help="Target spacing in mm")
-    
-    parser.add_argument("--normalize", type=str, default="z_score",
+
+    parser.add_argument("--normalize", type=str, default=preprocessing_config.get("normalize_mode", "z_score"),
                         choices=["z_score", "percentile", "min_max"],
                         help="Intensity normalization method")
-    
+
     parser.add_argument("--crop-foreground", action="store_true",
                         help="Crop to foreground region")
-    
+
     parser.add_argument("--splits", type=str, nargs="+", default=["train", "val", "test"],
                         help="Dataset splits to create")
-    
+
     parser.add_argument("--split-ratio", type=float, nargs="+", default=[0.7, 0.15, 0.15],
                         help="Ratio for train/val/test split")
-    
-    parser.add_argument("--seed", type=int, default=42,
+
+    parser.add_argument("--seed", type=int, default=41,
                         help="Random seed for data splitting")
-    
+
     return parser.parse_args()
 
 
