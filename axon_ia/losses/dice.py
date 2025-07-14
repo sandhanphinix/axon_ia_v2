@@ -61,13 +61,12 @@ class DiceLoss(nn.Module):
         Returns:
             Dice loss
         """
-        # Ensure target has the right shape
-        if target.dim() != input.dim():
-            target = F.one_hot(target.long(), input.size(1))
-            target = target.permute(0, -1, *range(1, target.dim() - 1))
-        
-        # Binary case handling
+        # Binary case handling (1 output channel)
         if input.size(1) == 1:
+            # For binary segmentation, just add channel dimension to target if needed
+            if target.dim() != input.dim():
+                target = target.unsqueeze(1)  # Add channel dimension
+            
             input = torch.sigmoid(input)
             
             # Flatten
@@ -94,6 +93,11 @@ class DiceLoss(nn.Module):
         
         # Multi-class case
         else:
+            # Ensure target has the right shape for multi-class
+            if target.dim() != input.dim():
+                target = F.one_hot(target.long(), input.size(1))
+                target = target.permute(0, -1, *range(1, target.dim() - 1)).float()
+            
             # Apply softmax to get probabilities
             input = F.softmax(input, dim=1)
             
@@ -118,12 +122,7 @@ class DiceLoss(nn.Module):
             # Average over classes
             dice_loss = dice_loss / (n_classes - start_idx)
             
-            if self.reduction == "mean":
-                return dice_loss
-            elif self.reduction == "sum":
-                return dice_loss * input.size(0)
-            else:  # 'none'
-                return dice_loss
+            return dice_loss
     
     def _binary_dice_loss(
         self,

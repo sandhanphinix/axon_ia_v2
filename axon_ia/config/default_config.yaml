@@ -81,7 +81,7 @@ scheduler:
 training:
   # Training parameters
   epochs: 20
-  output_dir: "./outputs"
+  output_dir: "C:/development/data/axon_ia/outputs"
   use_amp: true             # Use automatic mixed precision
   grad_clip: 1.0            # Gradient clipping value
   val_interval: 1           # Validation interval in epochs

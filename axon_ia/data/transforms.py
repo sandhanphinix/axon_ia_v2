@@ -285,16 +285,52 @@ class ToTensord:
         """Convert arrays to tensors."""
         for key in self.keys:
             if key in sample and isinstance(sample[key], np.ndarray):
-                sample[key] = torch.from_numpy(sample[key])
+                # Create contiguous tensor and ensure float32 dtype
+                tensor = torch.from_numpy(sample[key].astype(np.float32))
+                sample[key] = tensor.contiguous()
         
         return sample
 
 
-def get_default_transform() -> Callable:
+class SpatialNormalize:
+    """Resample or resize image and mask to a target spacing or shape."""
+    def __init__(
+        self,
+        keys: list = ["image", "mask"],
+        target_spacing: tuple = (1.0, 1.0, 1.0),
+        mode: str = "bilinear",
+        mask_mode: str = "nearest",
+        align_corners: bool = False,
+    ):
+        """
+        Args:
+            keys: Keys to apply normalization to (e.g., ["image", "mask"])
+            target_spacing: Target voxel spacing (z, y, x)
+            mode: Interpolation for images
+            mask_mode: Interpolation for masks
+            align_corners: Passed to MONAI Spacing
+        """
+        from monai.transforms import Spacing
+        self.keys = keys
+        self.target_spacing = target_spacing
+        self.mode = mode
+        self.mask_mode = mask_mode
+        self.align_corners = align_corners
+        self.spacing = Spacing(
+            pixdim=target_spacing,
+            mode={k: (mode if k == "image" else mask_mode) for k in keys},
+            align_corners=align_corners,
+            keys=keys
+        )
+
+    def __call__(self, sample: dict) -> dict:
+        return self.spacing(sample)
+
+
+def get_default_transform(target_spacing=(1.0, 1.0, 1.0)) -> Callable:
     """Get default transform pipeline."""
     return ComposeTransforms([
         NormalizeImage(mode='z_score', channel_wise=True),
-        CropForegroundd(keys=["image", "mask"], source_key="image"),
         ToTensord(keys=["image", "mask"])
     ])
 

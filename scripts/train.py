@@ -26,6 +26,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from axon_ia.config import ConfigParser
 from axon_ia.data import AxonDataset
+from axon_ia.data.transforms import get_default_transform
 from axon_ia.models import create_model
 from axon_ia.losses import create_loss_function
 from axon_ia.training import Trainer, create_scheduler
@@ -152,16 +153,33 @@ def main():
     logger.info("Creating datasets")
     data_config = config.get("data")
     
+    # Create transforms
+    dataset_params = data_config.get("dataset_params", {})
+    if "transform" in dataset_params:
+        transform_type = dataset_params.pop("transform")  # Remove from dataset_params
+        if transform_type == "train":
+            transform = get_default_transform()
+        else:
+            transform = None
+    else:
+        transform = get_default_transform()  # Default transform
+    
     train_dataset = AxonDataset(
         data_config["root_dir"],
         split="train",
-        **data_config.get("dataset_params", {})
+        modalities=data_config.get("modalities", []),
+        target=data_config.get("target", None),
+        transform=transform,
+        **dataset_params
     )
     
     val_dataset = AxonDataset(
         data_config["root_dir"],
         split="val",
-        **data_config.get("dataset_params", {})
+        modalities=data_config.get("modalities", []),
+        target=data_config.get("target", None),
+        transform=transform,  # Use same transform for validation
+        **dataset_params
     )
     
     # Create data loaders
@@ -170,8 +188,8 @@ def main():
         train_dataset,
         batch_size=data_config.get("batch_size", 4),
         shuffle=True,
-        num_workers=data_config.get("num_workers", 4),
-        pin_memory=True,
+        num_workers=0,  # Disable multiprocessing temporarily
+        pin_memory=False,  # Disable pin_memory when using CPU
         drop_last=True
     )
     
@@ -179,8 +197,8 @@ def main():
         val_dataset,
         batch_size=data_config.get("batch_size", 4),
         shuffle=False,
-        num_workers=data_config.get("num_workers", 4),
-        pin_memory=True
+        num_workers=0,  # Disable multiprocessing temporarily
+        pin_memory=False  # Disable pin_memory when using CPU
     )
     
     # Create model
@@ -203,8 +221,8 @@ def main():
     logger.info("Creating optimizer")
     optimizer_config = config.get("optimizer")
     optimizer_type = optimizer_config.get("type", "adamw")
-    lr = optimizer_config.get("learning_rate", 1e-4)
-    
+    lr = float(optimizer_config.get("learning_rate", 1e-4))
+
     if optimizer_type == "adam":
         optimizer = optim.Adam(
             model.parameters(),
@@ -312,6 +330,25 @@ def main():
         if checkpoint_path:
             logger.info(f"Resuming from checkpoint: {checkpoint_path}")
             trainer._load_checkpoint(checkpoint_path)
+    
+    # Test data loading
+    logger.info("Testing data loading...")
+    try:
+        test_sample = train_dataset[0]
+        logger.info(f"Sample keys: {test_sample.keys()}")
+        logger.info(f"Image shape: {test_sample['image'].shape}, dtype: {test_sample['image'].dtype}")
+        logger.info(f"Mask shape: {test_sample['mask'].shape}, dtype: {test_sample['mask'].dtype}")
+        logger.info(f"Image contiguous: {test_sample['image'].is_contiguous()}")
+        logger.info(f"Mask contiguous: {test_sample['mask'].is_contiguous()}")
+        
+        # Test batch loading
+        test_batch = next(iter(train_loader))
+        logger.info(f"Batch image shape: {test_batch['image'].shape}")
+        logger.info(f"Batch mask shape: {test_batch['mask'].shape}")
+        logger.info("Data loading test successful!")
+    except Exception as e:
+        logger.error(f"Data loading test failed: {e}")
+        raise e
     
     # Train model
     logger.info("Starting training")

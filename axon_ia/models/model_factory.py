@@ -68,7 +68,6 @@ def create_model(
     # SwinUNETR model
     elif architecture == "swinunetr" or architecture == "swin_unetr":
         model = SwinUNETR(
-            img_size=img_size,
             in_channels=in_channels,
             out_channels=out_channels,
             feature_size=kwargs.get("feature_size", 48),
@@ -152,15 +151,14 @@ def create_model(
         available = ["unetr", "swinunetr", "nnunet", "segresnet", "ensemble"]
         raise ValueError(f"Unknown architecture: {architecture}. Available: {available}")
     
-    # Load pretrained weights if requested
-    if pretrained and architecture != "ensemble":
-        try:
-            from axon_ia.utils.model_weights import load_pretrained_weights
-            load_pretrained_weights(model, architecture)
-            logger.info(f"Loaded pretrained weights for {architecture}")
-        except Exception as e:
-            logger.warning(f"Failed to load pretrained weights: {e}")
-    
+    # # Load pretrained weights if requested
+    # if pretrained and architecture != "ensemble":
+    #     try:
+    #         from axon_ia.utils.model_weights import load_pretrained_weights
+    #         load_pretrained_weights(model, architecture)
+    #         logger.info(f"Loaded pretrained weights for {architecture}")
+    #     except Exception as e:
+    #         logger.warning(f"Failed to load pretrained weights: {e}") 
     # Log model creation
     num_params = sum(p.numel() for p in model.parameters())
     logger.info(f"Created {architecture} model with {num_params:,} parameters")

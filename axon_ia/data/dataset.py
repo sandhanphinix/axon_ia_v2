@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple, Union, Callable
 import random
 
 import numpy as np
+from monai.transforms import Resize
 import torch
 from torch.utils.data import Dataset
 
@@ -146,39 +147,59 @@ class AxonDataset(Dataset):
         """
         sample_dir = self.root_dir / self.split / sample_id
         
-        # Try to load from cache first
-        if self.cache_dir is not None:
-            cache_file = self.cache_dir / f"{self.split}_{sample_id}.npz"
-            if cache_file.exists():
-                try:
-                    cached_data = np.load(cache_file, allow_pickle=True)
-                    return {
-                        "image": cached_data["image"],
-                        "mask": cached_data["mask"],
-                        "sample_id": sample_id
-                    }
-                except Exception as e:
-                    logger.warning(f"Failed to load from cache: {e}")
+        # Skip cache for now to ensure consistent shapes
+        # TODO: Fix cache to store consistently shaped data
+        # if self.cache_dir is not None:
+        #     cache_file = self.cache_dir / f"{self.split}_{sample_id}.npz"
+        #     if cache_file.exists():
+        #         try:
+        #             cached_data = np.load(cache_file, allow_pickle=True)
+        #             return {
+        #                 "image": cached_data["image"],
+        #                 "mask": cached_data["mask"],
+        #                 "sample_id": sample_id
+        #             }
+        #         except Exception as e:
+        #             logger.warning(f"Failed to load from cache: {e}")
         
-        # Load modalities
+        # Load modalities and normalize shapes
+        from monai.transforms import Resize
+        import torch
+        target_size = (128, 128, 128)  # Standard size - adjust as needed
+        
         modality_arrays = []
+        
         for modality in self.modalities:
             modality_files = list(sample_dir.glob(f"{modality}{self.pattern[1:]}"))
             if not modality_files:
                 raise ValueError(f"Modality {modality} not found for sample {sample_id}")
             
             modality_data = load_nifti(modality_files[0])
-            modality_arrays.append(modality_data)
+            
+            # Apply resize transform to normalize shape
+            resize_transform = Resize(spatial_size=target_size, mode="trilinear")
+            # Convert to tensor, add channel dimension, resize, then back to numpy
+            modality_tensor = torch.from_numpy(modality_data).unsqueeze(0)  # Add channel dim
+            resized_tensor = resize_transform(modality_tensor)
+            resized_array = resized_tensor.squeeze(0).numpy()  # Remove channel dim
+            
+            modality_arrays.append(resized_array)
         
         # Stack modalities to create multi-channel image
         image = np.stack(modality_arrays, axis=0)
         
-        # Load target
+        # Load target and apply same normalization
         mask_files = list(sample_dir.glob(f"{self.target}{self.pattern[1:]}"))
         if not mask_files:
             raise ValueError(f"Target {self.target} not found for sample {sample_id}")
         
         mask = load_nifti(mask_files[0])
+        
+        # Apply same resize transform to mask
+        resize_transform = Resize(spatial_size=target_size, mode="nearest")
+        mask_tensor = torch.from_numpy(mask).unsqueeze(0)
+        resized_mask_tensor = resize_transform(mask_tensor)
+        mask = resized_mask_tensor.squeeze(0).numpy()
         
         # Ensure mask is binary
         mask = (mask > 0).astype(np.float32)
@@ -230,11 +251,11 @@ class AxonDataset(Dataset):
         if self.transform:
             sample = self.transform(sample)
         
-        # Convert to tensors
-        if isinstance(sample["image"], np.ndarray):
-            sample["image"] = torch.from_numpy(sample["image"])
-        if isinstance(sample["mask"], np.ndarray):
-            sample["mask"] = torch.from_numpy(sample["mask"])
+        # Ensure tensors are returned (transform should handle this)
+        if not isinstance(sample["image"], torch.Tensor):
+            sample["image"] = torch.from_numpy(sample["image"].astype(np.float32)).contiguous()
+        if not isinstance(sample["mask"], torch.Tensor):
+            sample["mask"] = torch.from_numpy(sample["mask"].astype(np.float32)).contiguous()
         
         return sample
 

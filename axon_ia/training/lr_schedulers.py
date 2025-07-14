@@ -181,27 +181,27 @@ def create_scheduler(
     if scheduler_type == "cosine":
         return torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
-            T_max=num_epochs - kwargs.get("warmup_epochs", 0),
-            eta_min=kwargs.get("min_lr", 0)
+            T_max=num_epochs - int(kwargs.get("warmup_epochs", 0)),
+            eta_min=float(kwargs.get("min_lr", 0))
         )
     
     elif scheduler_type == "cosine_warmup":
         return WarmupCosineScheduler(
             optimizer,
-            warmup_epochs=kwargs.get("warmup_epochs", 5),
+            warmup_epochs=int(kwargs.get("warmup_epochs", 5)),
             max_epochs=num_epochs,
-            warmup_start_lr=kwargs.get("warmup_start_lr", 1e-6),
-            eta_min=kwargs.get("min_lr", 0)
+            warmup_start_lr=float(kwargs.get("warmup_start_lr", 1e-6)),
+            eta_min=float(kwargs.get("min_lr", 0))
         )
     
     elif scheduler_type == "polynomial":
         return PolynomialLRScheduler(
             optimizer,
             max_epochs=num_epochs,
-            power=kwargs.get("power", 0.9),
-            warmup_epochs=kwargs.get("warmup_epochs", 0),
-            warmup_start_lr=kwargs.get("warmup_start_lr", 1e-6),
-            eta_min=kwargs.get("min_lr", 0)
+            power=float(kwargs.get("power", 0.9)),
+            warmup_epochs=int(kwargs.get("warmup_epochs", 0)),
+            warmup_start_lr=float(kwargs.get("warmup_start_lr", 1e-6)),
+            eta_min=float(kwargs.get("min_lr", 0))
         )
     
     elif scheduler_type == "step":

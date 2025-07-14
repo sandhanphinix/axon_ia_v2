@@ -1,11 +1,11 @@
 # SwinUNETR Training Configuration
 
 data:
-  root_dir: "./data"
-  modalities: ["flair", "t1", "t2", "dwi"]
-  target: "mask"
-  batch_size: 1
-  num_workers: 4
+  root_dir: "C:/development/data/axon_ia/processed"
+  modalities: ["flair", "b0", "b1000", "t2star"]
+  target: "perfroi"
+  batch_size: 1  # Reduced for low-power systems
+  num_workers: 0  # Disable multiprocessing for stability
   dataset_params:
     transform: "train"
     preload: false
@@ -20,7 +20,6 @@ model:
   params:
     in_channels: 4
     out_channels: 1
-    img_size: [128, 128, 128]
     feature_size: 48
     drop_rate: 0.0
     attn_drop_rate: 0.0
@@ -49,8 +48,8 @@ scheduler:
     min_lr: 1e-6
 
 training:
-  epochs: 300
-  output_dir: "./outputs/swinunetr"
+  epochs: 20
+  output_dir: "C:/development/data/axon_ia/outputs/swinunetr"
   use_amp: true
   grad_clip: 1.0
   val_interval: 1

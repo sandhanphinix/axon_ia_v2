@@ -15,6 +15,9 @@ import torch
 import torch.nn as nn
 
 from monai.networks.nets import SwinUNETR as MonaiSwinUNETR
+from axon_ia.utils.logger import get_logger
+
+logger = get_logger()
 
 
 class SwinUNETR(nn.Module):
@@ -27,7 +30,6 @@ class SwinUNETR(nn.Module):
     
     def __init__(
         self,
-        img_size: Tuple[int, int, int] = (128, 128, 128),
         in_channels: int = 4,
         out_channels: int = 1,
         feature_size: int = 48,
@@ -36,12 +38,13 @@ class SwinUNETR(nn.Module):
         dropout_path_rate: float = 0.0,
         use_checkpoint: bool = False,
         use_deep_supervision: bool = False,
+        # img_size and other unused kwargs for compatibility
+        **kwargs
     ):
         """
         Initialize SwinUNETR model.
         
         Args:
-            img_size: Input image size
             in_channels: Number of input channels
             out_channels: Number of output channels (classes)
             feature_size: Feature size for the model
@@ -57,7 +60,6 @@ class SwinUNETR(nn.Module):
         
         # Create base SwinUNETR model from MONAI
         self.swin_unetr = MonaiSwinUNETR(
-            img_size=img_size,
             in_channels=in_channels,
             out_channels=out_channels,
             feature_size=feature_size,
@@ -68,59 +70,15 @@ class SwinUNETR(nn.Module):
         )
         
         # Add deep supervision heads if requested
+        # TODO: Implement deep supervision properly with MONAI 1.5.0+
+        # For now, disable deep supervision to avoid compatibility issues
         if use_deep_supervision:
-            # Define deep supervision heads
-            self.deep_supervision_heads = nn.ModuleList([
-                nn.Conv3d(feature_size * 8, out_channels, kernel_size=1),
-                nn.Conv3d(feature_size * 4, out_channels, kernel_size=1),
-                nn.Conv3d(feature_size * 2, out_channels, kernel_size=1),
-            ])
-            
-            # Define upsampling for deep supervision outputs
-            self.deep_supervision_upsamples = nn.ModuleList([
-                nn.Upsample(scale_factor=8, mode='trilinear', align_corners=False),
-                nn.Upsample(scale_factor=4, mode='trilinear', align_corners=False),
-                nn.Upsample(scale_factor=2, mode='trilinear', align_corners=False),
-            ])
-            
-            # Set deep supervision weights (can be tuned)
-            self.deep_supervision_weights = [0.4, 0.3, 0.2, 0.1]
-            
-            # We need to modify the forward method of the base model
-            # to get the intermediate features
-            self._patch_forward_method()
-    
-    def _patch_forward_method(self):
-        """Patch the forward method of the base model to get intermediate features."""
-        # Store the original forward method
-        original_forward = self.swin_unetr.forward
+            logger.warning("Deep supervision temporarily disabled for MONAI compatibility")
+            use_deep_supervision = False
         
-        # Define our patched forward method
-        def patched_forward(x):
-            # Get encoder features
-            x_enc1, x_enc2, x_enc3, x_enc4 = self.swin_unetr.get_encoder_features(x)
-            
-            # Bottleneck
-            x_tr = self.swin_unetr.encoder_tr(x_enc4)
-            
-            # Decoder path
-            x5 = self.swin_unetr.decoder_5(x_tr, x_enc4)
-            x4 = self.swin_unetr.decoder_4(x5, x_enc3)
-            x3 = self.swin_unetr.decoder_3(x4, x_enc2)
-            x2 = self.swin_unetr.decoder_2(x3, x_enc1)
-            
-            # Final output
-            logits = self.swin_unetr.out(x2)
-            
-            # Store intermediate decoder features for deep supervision
-            self.deep_features = [x5, x4, x3]
-            
-            return logits
-        
-        # Replace the forward method
-        self.swin_unetr.forward = patched_forward
+        self.use_deep_supervision = use_deep_supervision
     
-    def forward(self, x: torch.Tensor) -> Union[torch.Tensor, Tuple[torch.Tensor, ...]]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through the SwinUNETR model.
         
@@ -128,26 +86,7 @@ class SwinUNETR(nn.Module):
             x: Input tensor
             
         Returns:
-            Output tensor or tuple of output tensors (if deep supervision is used)
+            Output tensor
         """
-        # Call the base model's forward method
-        logits = self.swin_unetr(x)
-        
-        # Return intermediate outputs for deep supervision if enabled
-        if self.use_deep_supervision and self.training:
-            # Get intermediate features
-            deep_outputs = [logits]
-            
-            # Generate predictions from intermediate features
-            for i, (feature, head, upsample) in enumerate(zip(
-                self.deep_features,
-                self.deep_supervision_heads,
-                self.deep_supervision_upsamples
-            )):
-                # Apply head and upsample to match original size
-                deep_output = upsample(head(feature))
-                deep_outputs.append(deep_output)
-            
-            return tuple(deep_outputs)
-        else:
-            return logits
+        # Use the standard MONAI SwinUNETR forward method
+        return self.swin_unetr(x)
