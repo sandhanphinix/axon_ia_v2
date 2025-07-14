@@ -91,22 +91,34 @@ def main():
     # Override config with command line arguments
     if args.data_dir:
         config.override("data.root_dir", args.data_dir)
-    if args.output_dir:
-        config.override("training.output_dir", args.output_dir)
     
     # Create output directory
-    output_dir = Path(config.get("training.output_dir"))
-    eval_dir = output_dir / f"evaluation_{args.split}"
+    if args.output_dir:
+        # Use the provided output directory directly
+        eval_dir = Path(args.output_dir)
+    else:
+        # Use config output directory with evaluation subdirectory
+        output_dir = Path(config.get("training.output_dir"))
+        eval_dir = output_dir / f"evaluation_{args.split}"
+    
     eval_dir.mkdir(parents=True, exist_ok=True)
     
     # Create dataset
     logger.info(f"Creating {args.split} dataset")
     data_config = config.get("data")
     
+    # For evaluation, we don't need training transforms
+    dataset_params = data_config.get("dataset_params", {}).copy()
+    if "transform" in dataset_params:
+        # Remove transform for evaluation to use defaults (no augmentation)
+        del dataset_params["transform"]
+    
     dataset = AxonDataset(
         data_config["root_dir"],
         split=args.split,
-        **data_config.get("dataset_params", {})
+        modalities=data_config["modalities"],
+        target=data_config["target"],
+        **dataset_params
     )
     
     # Create data loader
@@ -261,6 +273,10 @@ def main():
         for i, sample_id in enumerate(all_sample_ids):
             # Get prediction for this sample
             pred = all_predictions[i].numpy()
+            
+            # Convert boolean predictions to uint8 for NIfTI compatibility
+            if pred.dtype == bool:
+                pred = pred.astype(np.uint8)
             
             # Save as NIfTI
             pred_path = pred_dir / f"{sample_id}_pred.nii.gz"

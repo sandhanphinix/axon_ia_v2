@@ -1,0 +1,90 @@
+# Post-Training Analysis Configuration
+# This file configures the complete post-training analysis workflow
+
+# Required paths
+training:
+  config_path: "configs/training/swinunetr_config.yaml"
+  checkpoint_path: "C:/development/data/axon_ia/outputs/swinunetr/checkpoints/model_015.pth"  # Update this path
+
+# Data configuration
+data:
+  data_dir: "C:/development/data/axon_ia/processed"  # Override training config data dir if needed
+  splits: ["test"]  # Splits to evaluate: train, val, test
+  
+# Output configuration
+output:
+  base_dir: "C:/development/data/axon_ia/post_training_analysis"
+  create_timestamp_folder: true  # Create subfolder with timestamp
+  
+# Analysis steps to run
+steps:
+  evaluation:
+    enabled: true
+    skip_if_exists: false  # Skip if evaluation already exists
+    batch_size: 1  # Batch size for evaluation
+    save_predictions: true
+    generate_report: true
+    # metrics: ["dice", "iou", "hausdorff", "precision", "recall"]
+    metrics: ["dice", "iou"]
+    
+  visualization:
+    enabled: true
+    skip_if_exists: false
+    num_samples: 10  # Number of samples to visualize
+    modality: "flair"  # Background modality for visualization
+    slice_selection: "center"  # center, max_lesion, all
+    create_overlays: true
+    create_error_analysis: true
+    create_metrics_summary: true
+    
+  analysis:
+    enabled: true
+    generate_recommendations: true
+    performance_thresholds:
+      excellent_dice: 0.8
+      good_dice: 0.7
+      fair_dice: 0.5
+      min_precision: 0.7
+      min_recall: 0.7
+    
+  reporting:
+    enabled: true
+    formats: ["markdown", "json"]  # Available: markdown, json, html
+    include_visualizations: true
+    include_config_comparison: true
+
+# Advanced options
+advanced:
+  parallel_processing: false  # Enable parallel processing where possible
+  verbose: true  # Detailed logging
+  save_intermediate_results: true
+  cleanup_temp_files: false
+  
+  # Resource limits
+  max_memory_gb: 8  # Maximum memory usage
+  max_concurrent_jobs: 2
+  
+  # Notification settings (optional)
+  notifications:
+    enabled: false
+    email: ""  # Email for completion notifications
+    slack_webhook: ""  # Slack webhook URL
+
+# Custom analysis options
+custom:
+  # Compare with previous models
+  model_comparison:
+    enabled: false
+    previous_results: []  # List of previous analysis result directories
+    
+  # Clinical validation
+  clinical_validation:
+    enabled: false
+    radiologist_annotations: ""  # Path to radiologist review data
+    
+  # Export for external tools
+  export:
+    enabled: false
+    format: "nifti"  # nifti, dicom, numpy
+    export_predictions: false
+    export_overlays: false

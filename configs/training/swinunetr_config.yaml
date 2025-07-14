@@ -37,7 +37,7 @@ loss:
 
 optimizer:
   type: "adamw"
-  learning_rate: 5e-5
+  learning_rate: 1e-5
   weight_decay: 0.01
 
 scheduler:

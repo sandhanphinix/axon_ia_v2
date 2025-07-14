@@ -23,13 +23,14 @@ def plot_segmentation_overlay(
     pred_color: str = 'blue',
     figsize: Tuple[int, int] = (10, 8),
     title: Optional[str] = None,
-    save_path: Optional[Union[str, Path]] = None
+    save_path: Optional[Union[str, Path]] = None,
+    channel: int = 0
 ) -> plt.Figure:
     """
     Plot an image with segmentation mask and/or prediction overlay.
     
     Args:
-        image: 3D image array
+        image: 3D or 4D image array. If 4D, first dimension is channels.
         mask: Ground truth mask (optional)
         prediction: Predicted mask (optional)
         slice_idx: Index of slice to plot (if None, uses middle slice)
@@ -40,10 +41,30 @@ def plot_segmentation_overlay(
         figsize: Figure size
         title: Plot title
         save_path: Path to save the figure
+        channel: Channel to display for multi-channel images
         
     Returns:
         Matplotlib figure
     """
+    # Handle multi-channel images - be more robust
+    if image.ndim == 4:
+        # Select the specified channel
+        if channel < image.shape[0]:
+            image = image[channel]
+        else:
+            # Default to first channel if requested channel doesn't exist
+            image = image[0]
+    elif image.ndim > 3:
+        # Handle case where there are extra dimensions
+        # Squeeze out singleton dimensions and take first channel
+        image = np.squeeze(image)
+        if image.ndim == 4:
+            image = image[0]
+    
+    # Ensure we have a 3D image at this point
+    if image.ndim != 3:
+        raise ValueError(f"Expected 3D image after channel selection, got shape {image.shape}")
+    
     # Default to middle slice if not specified
     if slice_idx is None:
         slice_idx = image.shape[axis] // 2
@@ -281,13 +302,14 @@ def plot_multiple_slices(
     mask_color: str = 'red',
     pred_color: str = 'blue',
     title: Optional[str] = None,
-    save_path: Optional[Union[str, Path]] = None
+    save_path: Optional[Union[str, Path]] = None,
+    channel: int = 0
 ) -> plt.Figure:
     """
     Plot multiple slices of an image with segmentation overlays.
     
     Args:
-        image: 3D image array
+        image: 3D or 4D image array. If 4D, first dimension is channels.
         mask: Ground truth mask (optional)
         prediction: Predicted mask (optional)
         axis: Axis to slice along (0=sagittal, 1=coronal, 2=axial)
@@ -298,10 +320,54 @@ def plot_multiple_slices(
         pred_color: Color for prediction mask
         title: Plot title
         save_path: Path to save the figure
+        channel: Channel to display for multi-channel images
         
     Returns:
         Matplotlib figure
     """
+    # Handle multi-channel images - be more robust  
+    if image.ndim == 4:
+        # Select the specified channel
+        if channel < image.shape[0]:
+            image = image[channel]
+        else:
+            # Default to first channel if requested channel doesn't exist
+            image = image[0]
+    elif image.ndim > 3:
+        # Handle case where there are extra dimensions
+        # Squeeze out singleton dimensions and take first channel
+        image = np.squeeze(image)
+        if image.ndim == 4:
+            image = image[0]
+    
+    # Ensure we have a 3D image at this point
+    if image.ndim != 3:
+        raise ValueError(f"Expected 3D image after channel selection, got shape {image.shape}")
+    
+    # Validate and process mask array
+    if mask is not None:
+        if mask.ndim == 4:
+            # Take first channel for mask (segmentation masks are typically single channel)
+            mask = mask[0] if mask.shape[0] == 1 else mask[0]
+        elif mask.ndim > 3:
+            mask = np.squeeze(mask)
+            if mask.ndim == 4:
+                mask = mask[0]
+        if mask.ndim != 3:
+            raise ValueError(f"Expected 3D mask after processing, got shape {mask.shape}")
+    
+    # Validate and process prediction array
+    if prediction is not None:
+        if prediction.ndim == 4:
+            # Take first channel for prediction (segmentation predictions are typically single channel)
+            prediction = prediction[0] if prediction.shape[0] == 1 else prediction[0]
+        elif prediction.ndim > 3:
+            prediction = np.squeeze(prediction)
+            if prediction.ndim == 4:
+                prediction = prediction[0]
+        if prediction.ndim != 3:
+            raise ValueError(f"Expected 3D prediction after processing, got shape {prediction.shape}")
+        
     # Determine slice indices
     total_slices = image.shape[axis]
     

@@ -255,7 +255,7 @@ def hausdorff_distance(
     
     # Compute directed Hausdorff distance from prediction to ground truth
     try:
-        from scipy.ndimage import distance_transform_edt
+        from scipy.ndimage import distance_transform_edt, binary_erosion
         
         # Calculate distance transforms
         if spacing is not None:
@@ -266,8 +266,8 @@ def hausdorff_distance(
             dt_pred = distance_transform_edt(1 - y_pred)
         
         # Get surface points
-        pred_surface = ((y_pred - ndimage.binary_erosion(y_pred, iterations=1)) > 0)
-        true_surface = ((y_true - ndimage.binary_erosion(y_true, iterations=1)) > 0)
+        pred_surface = ((y_pred - binary_erosion(y_pred, iterations=1)) > 0)
+        true_surface = ((y_true - binary_erosion(y_true, iterations=1)) > 0)
         
         # Compute directed Hausdorff distances
         dist_pred_to_true = dt_true[pred_surface]
@@ -295,22 +295,34 @@ def hausdorff_distance(
         true_points = np.argwhere(y_true > 0)
         pred_points = np.argwhere(y_pred > 0)
         
-        # Apply spacing if provided
-        if spacing is not None:
-            true_points = true_points * np.array(spacing)
-            pred_points = pred_points * np.array(spacing)
-        
-        # Calculate directed Hausdorff distances
+        # Check for empty arrays
         if len(true_points) == 0 or len(pred_points) == 0:
             return float('inf')
         
-        hausdorff_pred_to_true = directed_hausdorff(pred_points, true_points)[0]
-        hausdorff_true_to_pred = directed_hausdorff(true_points, pred_points)[0]
+        # Ensure both arrays have the same number of dimensions
+        if true_points.shape[1] != pred_points.shape[1]:
+            # This should not happen with proper input, but handle it gracefully
+            return float('inf')
         
-        # Symmetric Hausdorff distance
-        hausdorff = max(hausdorff_pred_to_true, hausdorff_true_to_pred)
+        # Apply spacing if provided
+        if spacing is not None:
+            spacing_array = np.array(spacing)
+            if len(spacing_array) == true_points.shape[1]:
+                true_points = true_points * spacing_array
+                pred_points = pred_points * spacing_array
         
-        return float(hausdorff)
+        # Calculate directed Hausdorff distances
+        try:
+            hausdorff_pred_to_true = directed_hausdorff(pred_points, true_points)[0]
+            hausdorff_true_to_pred = directed_hausdorff(true_points, pred_points)[0]
+            
+            # Symmetric Hausdorff distance
+            hausdorff = max(hausdorff_pred_to_true, hausdorff_true_to_pred)
+            
+            return float(hausdorff)
+        except Exception as inner_e:
+            # If Hausdorff calculation still fails, return infinity
+            return float('inf')
 
 
 def surface_dice(

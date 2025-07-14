@@ -1,0 +1,176 @@
+# Enhanced SwinUNETR Training Configuration
+# Version 2.0 - Based on analysis and best practices
+
+data:
+  root_dir: "C:/development/data/axon_ia/processed"
+  modalities: ["flair", "b0", "b1000", "t2star"]
+  target: "perfroi"
+  batch_size: 2  # Increased if GPU memory allows
+  num_workers: 0  # Keep 0 for stability on low-power systems
+  dataset_params:
+    transform: "train"
+    preload: false
+  preprocessing:
+    spacing: [1.0, 1.0, 1.0]
+    orientation: "RAS"
+    crop_foreground: true
+    normalize_mode: "z_score"
+  augmentation:
+    # Enhanced augmentation for better generalization
+    rotation: [-15, 15]  # degrees
+    scaling: [0.9, 1.1]
+    elastic_deformation: 
+      enabled: true
+      alpha: [0, 900]
+      sigma: [9, 13]
+    gaussian_noise:
+      enabled: true
+      std: 0.1
+    gaussian_blur:
+      enabled: true
+      sigma: [0.5, 1.5]
+    brightness: [-0.1, 0.1]
+    contrast: [0.9, 1.1]
+    gamma: [0.8, 1.2]
+
+model:
+  architecture: "swinunetr"
+  params:
+    in_channels: 4
+    out_channels: 1
+    feature_size: 96  # Increased from 48 for more capacity
+    drop_rate: 0.1    # Added regularization
+    attn_drop_rate: 0.1
+    dropout_path_rate: 0.1
+    use_checkpoint: true
+    use_deep_supervision: true
+    spatial_dims: 3
+
+loss:
+  type: "combo"
+  params:
+    dice_weight: 1.0
+    focal_weight: 1.0  # Balanced for both precision and recall
+    focal_gamma: 2.0
+    focal_alpha: 0.25
+    include_background: false
+    smooth: 1e-5
+    # Consider adding boundary loss for better edge detection
+    boundary_weight: 0.0  # Set to 0.2-0.5 if implementing boundary loss
+
+optimizer:
+  type: "adamw"
+  learning_rate: 1e-4  # Slightly increased from 5e-5
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  eps: 1e-8
+
+scheduler:
+  use_scheduler: true
+  type: "cosine_warmup"
+  params:
+    warmup_epochs: 20  # Longer warmup for better convergence
+    min_lr: 1e-7
+    eta_min: 1e-7
+
+training:
+  epochs: 100  # Increased for better convergence
+  output_dir: "C:/development/data/axon_ia/outputs/swinunetr_v2"
+  use_amp: true  # Mixed precision for memory efficiency
+  grad_clip: 1.0
+  val_interval: 1
+  log_interval: 10
+  save_interval: 10
+  
+  # Gradient accumulation for effective larger batch size
+  accumulate_grad_batches: 4  # Effective batch size = batch_size * accumulate_grad_batches
+  
+  # Advanced training strategies
+  warm_restart:
+    enabled: false  # Enable for longer training with restarts
+    restart_period: 50
+    
+  progressive_resizing:
+    enabled: false  # Enable for curriculum learning
+    start_size: [64, 64, 64]
+    end_size: [128, 128, 128]
+    resize_epochs: [20, 40]
+
+callbacks:
+  early_stopping:
+    enabled: true
+    monitor: "val_dice"
+    patience: 30  # Increased patience for longer training
+    mode: "max"
+    min_delta: 0.001
+    
+  model_checkpoint:
+    enabled: true
+    monitor: "val_dice"
+    save_best_only: true
+    mode: "max"
+    save_top_k: 3  # Keep top 3 models
+    
+  reduce_lr_on_plateau:
+    enabled: true
+    monitor: "val_dice"
+    factor: 0.5
+    patience: 15
+    mode: "max"
+    min_lr: 1e-7
+    
+  tensorboard:
+    enabled: true
+    log_freq: 1
+    
+  wandb:
+    enabled: false  # Enable for advanced experiment tracking
+    project_name: "axon_ia_v2"
+    run_name: "swinunetr_enhanced"
+    
+  learning_rate_finder:
+    enabled: false  # Enable to find optimal learning rate
+    min_lr: 1e-7
+    max_lr: 1e-2
+    num_training_steps: 100
+
+# Inference configuration
+inference:
+  batch_size: 1
+  overlap: 0.25  # For sliding window inference
+  mode: "gaussian"  # or "constant"
+  use_tta: false  # Test-time augmentation
+  tta_transforms: ["flip", "rotation"]
+  
+# Ensemble configuration (for multiple model training)
+ensemble:
+  enabled: false
+  models: ["swinunetr", "unetr", "segresnet"]
+  weights: [0.4, 0.3, 0.3]  # Ensemble weights
+  voting_strategy: "soft"  # or "hard"
+
+# Evaluation metrics
+evaluation:
+  metrics: ["dice", "iou", "hausdorff", "precision", "recall", "specificity"]
+  save_predictions: true
+  generate_visualizations: true
+  compute_surface_distance: true
+
+# Data quality and monitoring
+monitoring:
+  track_gradients: false  # Enable for gradient monitoring
+  track_weights: false    # Enable for weight distribution monitoring
+  check_data_consistency: true
+  validate_preprocessing: true
+
+# Hyperparameter search (for automated tuning)
+hyperparameter_search:
+  enabled: false
+  method: "random"  # or "grid", "bayesian"
+  num_trials: 50
+  parameters:
+    learning_rate: [1e-5, 1e-3]
+    feature_size: [48, 96, 128]
+    batch_size: [1, 2, 4]
+    dice_weight: [0.5, 1.0, 2.0]
+    focal_weight: [0.5, 1.0, 2.0]

@@ -1,0 +1,53 @@
+# Example Post-Training Analysis Configuration
+# Update the paths below to match your specific setup
+
+# Required paths
+training:
+  config_path: "configs/training/swinunetr_config.yaml"
+  checkpoint_path: "C:/development/data/axon_ia/outputs/swinunetr/checkpoints/model_015.pth"  # Update with your best model
+
+# Data configuration
+data:
+  data_dir: "C:/development/data/axon_ia/processed"
+  splits: ["val"]  # Start with validation, add "test" if available
+  
+# Output configuration
+output:
+  base_dir: "./analysis_results"
+  create_timestamp_folder: true  # Creates subfolder with timestamp
+  
+# Analysis steps to run
+steps:
+  evaluation:
+    enabled: true
+    skip_if_exists: false
+    batch_size: 1
+    save_predictions: true
+    generate_report: true
+    metrics: ["dice", "iou", "hausdorff", "precision", "recall"]
+    
+  visualization:
+    enabled: true
+    skip_if_exists: false
+    num_samples: 5  # Start small for testing
+    modality: "flair"
+    slice_selection: "center"
+    
+  analysis:
+    enabled: true
+    generate_recommendations: true
+    performance_thresholds:
+      excellent_dice: 0.8
+      good_dice: 0.7
+      fair_dice: 0.5
+      min_precision: 0.7
+      min_recall: 0.7
+    
+  reporting:
+    enabled: true
+    formats: ["markdown", "json"]
+
+# Advanced options
+advanced:
+  verbose: true
+  save_intermediate_results: true

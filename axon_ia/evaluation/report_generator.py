@@ -72,7 +72,8 @@ def generate_patient_report(
         num_slices=3,
         figsize=(15, 5),
         title=f"Axial Slices - Patient {patient_id}",
-        save_path=patient_dir / f"{patient_id}_axial.png"
+        save_path=patient_dir / f"{patient_id}_axial.png",
+        channel=0  # Use first channel (usually FLAIR)
     )
     visualizations["axial"] = f"{patient_id}_axial.png"
     plt.close(axial_fig)
@@ -86,7 +87,8 @@ def generate_patient_report(
         num_slices=3,
         figsize=(15, 5),
         title=f"Coronal Slices - Patient {patient_id}",
-        save_path=patient_dir / f"{patient_id}_coronal.png"
+        save_path=patient_dir / f"{patient_id}_coronal.png",
+        channel=0  # Use first channel (usually FLAIR)
     )
     visualizations["coronal"] = f"{patient_id}_coronal.png"
     plt.close(coronal_fig)
@@ -100,7 +102,8 @@ def generate_patient_report(
         num_slices=3,
         figsize=(15, 5),
         title=f"Sagittal Slices - Patient {patient_id}",
-        save_path=patient_dir / f"{patient_id}_sagittal.png"
+        save_path=patient_dir / f"{patient_id}_sagittal.png",
+        channel=0  # Use first channel (usually FLAIR)
     )
     visualizations["sagittal"] = f"{patient_id}_sagittal.png"
     plt.close(sagittal_fig)
@@ -371,7 +374,8 @@ def generate_evaluation_report(
                     num_slices=3,
                     figsize=(15, 5),
                     title=f"Patient {patient_id} - Axial View",
-                    save_path=figures_dir / f"example_{i+1}_patient_{patient_id}.png"
+                    save_path=figures_dir / f"example_{i+1}_patient_{patient_id}.png",
+                    channel=0  # Use first channel (usually FLAIR)
                 )
                 visualizations[f"example_{i+1}"] = f"figures/example_{i+1}_patient_{patient_id}.png"
                 plt.close(fig)
