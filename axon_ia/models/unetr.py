@@ -44,6 +44,7 @@ class UNETR(nn.Module):
         res_block: bool = True,
         dropout_rate: float = 0.0,
         use_deep_supervision: bool = False,
+        patch_size: Tuple[int, int, int] = (16, 16, 16),
     ):
         """
         Initialize UNETR model.
@@ -77,20 +78,22 @@ class UNETR(nn.Module):
         self.use_deep_supervision = use_deep_supervision
         
         # Calculate patch size and dimensions
-        self.patch_size = (16, 16, 16)
+        self.patch_size = patch_size
         self.num_patches = np.prod([im_d // p_d for im_d, p_d in zip(img_size, self.patch_size)])
         self.classification = False
         
         # Create Vision Transformer encoder
+        # Ensure we have enough layers for skip connections (need layers 3, 6, 9)
+        num_layers = max(12, 10)  # At least 10 layers to safely access layer 9
         self.vit = ViT(
             in_channels=in_channels,
             img_size=img_size,
             patch_size=self.patch_size,
             hidden_size=hidden_size,
             mlp_dim=mlp_dim,
-            num_layers=12,
+            num_layers=num_layers,
             num_heads=num_heads,
-            pos_embed=pos_embed,
+            pos_embed_type=pos_embed,  # Correct parameter name
             classification=self.classification,
             dropout_rate=dropout_rate,
         )
@@ -207,14 +210,34 @@ class UNETR(nn.Module):
         # Transformer encoder
         x_output, hidden_states = self.vit(x_in)
         
-        # Extract intermediate features
+        # Reshape hidden states from (B, num_patches, hidden_size) to (B, hidden_size, D, H, W)
+        batch_size = x_in.shape[0]
+        # Calculate spatial dimensions after patching
+        patch_dims = [dim // patch_dim for dim, patch_dim in zip(self.img_size, self.patch_size)]
+        
+        def reshape_hidden_state(hidden_state):
+            """Reshape from (B, num_patches, hidden_size) to (B, hidden_size, D, H, W)"""
+            return hidden_state.transpose(1, 2).view(
+                batch_size, self.hidden_size, patch_dims[0], patch_dims[1], patch_dims[2]
+            )
+        
+        # Extract and reshape intermediate features 
         enc1 = self.encoder1(x_in)
-        enc2 = self.encoder2(hidden_states[3])
-        enc3 = self.encoder3(hidden_states[6])
-        enc4 = self.encoder4(hidden_states[9])
+        # Ensure we don't exceed the available hidden states
+        max_layer = len(hidden_states) - 1
+        layer_3_idx = min(3, max_layer)
+        layer_6_idx = min(6, max_layer)
+        layer_9_idx = min(9, max_layer)
+        
+        enc2 = self.encoder2(reshape_hidden_state(hidden_states[layer_3_idx]))
+        enc3 = self.encoder3(reshape_hidden_state(hidden_states[layer_6_idx]))
+        enc4 = self.encoder4(reshape_hidden_state(hidden_states[layer_9_idx]))
+        
+        # Reshape final output
+        x_output_reshaped = reshape_hidden_state(x_output)
         
         # Decoder path
-        dec5 = self.decoder5(x_output, enc4)
+        dec5 = self.decoder5(x_output_reshaped, enc4)
         dec4 = self.decoder4(dec5, enc3)
         dec3 = self.decoder3(dec4, enc2)
         dec2 = self.decoder2(dec3, enc1)

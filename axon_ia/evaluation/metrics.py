@@ -423,6 +423,9 @@ def compute_metrics(
             results["hausdorff"] = hausdorff_distance(y_pred, y_true, spacing=spacing)
         elif metric == "surface_dice":
             results["surface_dice"] = surface_dice(y_pred, y_true, spacing=spacing)
+        elif metric == "volume_ratio":
+            voxel_vol = 1.0 if spacing is None else np.prod(spacing)
+            results["volume_ratio"] = volume_ratio(y_pred, y_true, voxel_volume=voxel_vol)
         else:
             raise ValueError(f"Unknown metric: {metric}")
     
@@ -458,3 +461,50 @@ def compute_metrics(
             results["volume_error_ratio"] = float(abs(pred_vol - true_vol) / true_vol)
     
     return results
+
+
+def volume_ratio(
+    y_pred: Union[np.ndarray, torch.Tensor],
+    y_true: Union[np.ndarray, torch.Tensor],
+    voxel_volume: float = 1.0
+) -> float:
+    """
+    Calculate volume ratio as defined in the challenge.
+    
+    Volume Ratio = max(1 - |∑Yk - ∑Ŷk| / ∑Yk, 0)
+    
+    Where:
+    - Yk is the ground truth volume
+    - Ŷk is the predicted volume
+    
+    Args:
+        y_pred: Prediction array
+        y_true: Ground truth array
+        voxel_volume: Volume of each voxel (default: 1.0)
+        
+    Returns:
+        Volume ratio score (0 to 1, higher is better)
+    """
+    # Convert to numpy if tensors
+    if isinstance(y_pred, torch.Tensor):
+        y_pred = y_pred.detach().cpu().numpy()
+    if isinstance(y_true, torch.Tensor):
+        y_true = y_true.detach().cpu().numpy()
+    
+    # Convert to binary
+    y_pred = (y_pred > 0.5).astype(np.float32)
+    y_true = (y_true > 0.5).astype(np.float32)
+    
+    # Calculate volumes
+    true_volume = np.sum(y_true) * voxel_volume
+    pred_volume = np.sum(y_pred) * voxel_volume
+    
+    # Handle case where true volume is 0
+    if true_volume == 0:
+        return 1.0 if pred_volume == 0 else 0.0
+    
+    # Calculate volume ratio
+    volume_diff = abs(true_volume - pred_volume)
+    ratio = max(1.0 - (volume_diff / true_volume), 0.0)
+    
+    return ratio

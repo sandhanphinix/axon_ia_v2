@@ -100,15 +100,17 @@ class AxonDataset(Dataset):
         Find all valid samples in the dataset.
         
         A valid sample must have all required modalities and target.
+        File naming convention: <modality>_<folder_name>.nii.gz
         
         Returns:
-            List of sample IDs
+            List of sample IDs (folder names like '001', '002', etc.)
         """
         import glob
         
         split_dir = self.root_dir / self.split
         if not split_dir.exists():
-            raise ValueError(f"Split directory not found: {split_dir}")
+            logger.warning(f"Split directory not found: {split_dir}")
+            return []
         
         # Find all potential sample directories
         sample_dirs = [d for d in split_dir.iterdir() if d.is_dir()]
@@ -116,22 +118,32 @@ class AxonDataset(Dataset):
         # Filter to those that have all required files
         valid_samples = []
         for sample_dir in sample_dirs:
-            # Check if all modalities and target exist
+            folder_name = sample_dir.name  # e.g., '001', '002', etc.
+            
+            # Check if all modalities and target exist with correct naming
             has_all_files = True
+            
+            # Check modalities: <modality>_<folder_name>.nii.gz
             for modality in self.modalities:
-                if not list(sample_dir.glob(f"{modality}{self.pattern[1:]}")):
+                expected_file = f"{modality}_{folder_name}.nii.gz"
+                if not (sample_dir / expected_file).exists():
                     has_all_files = False
                     break
             
-            # Check target
-            if has_all_files and not list(sample_dir.glob(f"{self.target}{self.pattern[1:]}")):
-                has_all_files = False
+            # Check target: <target>_<folder_name>.nii.gz
+            if has_all_files:
+                expected_target = f"{self.target}_{folder_name}.nii.gz"
+                if not (sample_dir / expected_target).exists():
+                    has_all_files = False
             
             if has_all_files:
-                valid_samples.append(sample_dir.name)
+                valid_samples.append(folder_name)
         
         if not valid_samples:
             logger.warning(f"No valid samples found in {split_dir}")
+            logger.info(f"Expected file pattern: <modality>_<folder_name>.nii.gz")
+            logger.info(f"Required modalities: {self.modalities}")
+            logger.info(f"Required target: {self.target}")
         
         return sorted(valid_samples)
     
@@ -165,16 +177,17 @@ class AxonDataset(Dataset):
         # Load modalities and normalize shapes
         from monai.transforms import Resize
         import torch
-        target_size = (128, 128, 128)  # Standard size - adjust as needed
+        target_size = (96, 96, 96)  # Updated to 96³ to match UNETR model expectations
         
         modality_arrays = []
         
         for modality in self.modalities:
-            modality_files = list(sample_dir.glob(f"{modality}{self.pattern[1:]}"))
-            if not modality_files:
-                raise ValueError(f"Modality {modality} not found for sample {sample_id}")
+            # Use correct file naming pattern: <modality>_<folder_name>.nii.gz
+            expected_file = sample_dir / f"{modality}_{sample_id}.nii.gz"
+            if not expected_file.exists():
+                raise ValueError(f"Modality file not found: {expected_file}")
             
-            modality_data = load_nifti(modality_files[0])
+            modality_data = load_nifti(expected_file)
             
             # Apply resize transform to normalize shape
             resize_transform = Resize(spatial_size=target_size, mode="trilinear")
@@ -188,12 +201,12 @@ class AxonDataset(Dataset):
         # Stack modalities to create multi-channel image
         image = np.stack(modality_arrays, axis=0)
         
-        # Load target and apply same normalization
-        mask_files = list(sample_dir.glob(f"{self.target}{self.pattern[1:]}"))
-        if not mask_files:
-            raise ValueError(f"Target {self.target} not found for sample {sample_id}")
+        # Load target with correct naming pattern: <target>_<folder_name>.nii.gz
+        expected_target = sample_dir / f"{self.target}_{sample_id}.nii.gz"
+        if not expected_target.exists():
+            raise ValueError(f"Target file not found: {expected_target}")
         
-        mask = load_nifti(mask_files[0])
+        mask = load_nifti(expected_target)
         
         # Apply same resize transform to mask
         resize_transform = Resize(spatial_size=target_size, mode="nearest")
@@ -201,8 +214,10 @@ class AxonDataset(Dataset):
         resized_mask_tensor = resize_transform(mask_tensor)
         mask = resized_mask_tensor.squeeze(0).numpy()
         
-        # Ensure mask is binary
+        # Ensure mask is binary and add channel dimension
         mask = (mask > 0).astype(np.float32)
+        # Add channel dimension to match model output shape
+        mask = np.expand_dims(mask, axis=0)  # Shape: (1, H, W, D)
         
         # Create sample
         sample = {

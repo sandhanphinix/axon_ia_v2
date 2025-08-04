@@ -1,0 +1,351 @@
+# Ensemble Training Configuration for Medical Image Segmentation
+# Optimized for small lesion detection with 5 state-of-the-art models
+# REORDERED: Testing uncertain models first, SwinUNETR last
+
+# Global settings
+global:
+  experiment_name: "ensemble_v2_small_lesions"
+  output_dir: "C:/development/data/axon_ia/outputs/ensemble_v2"
+  use_validation_split: false  # Disabled because we're using k-fold CV
+  seed: 41
+  
+  # 5-fold cross-validation
+  cross_validation:
+    enabled: true
+    n_folds: 5
+    stratified: true
+    random_state: 41
+  
+  # Enhanced data augmentation for small lesion detection
+  augmentation:
+    spatial:
+      rotation_range: [-15, 15]
+      scaling_range: [0.85, 1.15]
+      shearing_range: [-5, 5]
+      translation_range: [-10, 10]
+    
+    intensity:
+      brightness_range: [-0.15, 0.15]
+      contrast_range: [0.85, 1.15]
+      gamma_range: [0.8, 1.2]
+      gaussian_noise_std: 0.08
+      gaussian_blur_sigma: [0.5, 1.0]
+    
+    geometric:
+      elastic_deformation: true
+      flip_probability: 0.5
+      crop_foreground: true
+    
+    advanced:
+      mixup_alpha: 0.2
+      cutmix_alpha: 1.0
+      mosaic_probability: 0.1
+      copy_paste_probability: 0.05
+
+  # Training parameters - More aggressive for better performance
+  training:
+    max_epochs: 30
+    early_stopping_patience: 20  # Increased patience for convergence
+    batch_size: 1    # Keep at 1 for memory safety
+    accumulate_grad_batches: 6   # Increased to 6 for more stable gradients
+    precision: "32"  # Full precision for CPU
+    num_workers: 1   # Single worker to prevent CPU overload
+    pin_memory: false  # Disabled for CPU training
+    device: "cpu"    # Force CPU training
+    
+    # Curriculum learning
+    curriculum_learning:
+      enabled: true   
+      warmup_epochs: 15  # Increased warmup
+      easy_samples_ratio: 0.6  # Start with easier samples
+      difficulty_metric: "lesion_volume"
+    
+    # Class balancing for small lesions
+    class_balancing:
+      enabled: true   
+      small_lesion_threshold: 150  # Slightly larger threshold
+      small_lesion_boost: 3.0      # Increased boost for small lesions
+      hard_negative_mining: false  # Disable to reduce memory usage
+
+# Model configurations - REORDERED TO TEST FIXES FIRST
+models:
+  # Model 1: UNETR - Fixed version with improved parameters (TEST FIRST)
+  unetr_compact:
+    architecture: "unetr"
+    params:
+      img_size: [96, 96, 96]      # Keep the more powerful 96³ size
+      in_channels: 4
+      out_channels: 1
+      feature_size: 24            # Increase back for better performance  
+      hidden_size: 384            # Increase for better capacity (384/12=32)
+      mlp_dim: 1536               # Increase proportionally 
+      num_heads: 12
+      patch_size: 16              # 96/16 = 6, so 6³ = 216 patches
+      pos_embed: "learnable"      # Use learnable embeddings - will auto-size to 216 patches
+      norm_name: "instance"
+      conv_block: true
+      res_block: true
+      dropout_rate: 0.0           # No dropout for better learning
+      use_deep_supervision: false # Keep disabled for compatibility
+    
+    loss:
+      type: "combo_loss_v2"        # Consistent loss function
+      params:
+        dice_weight: 1.0
+        focal_weight: 0.5
+        focal_gamma: 2.0
+        boundary_weight: 0.1      # Small boundary loss for edge detection
+    
+    optimizer:
+      type: "adamw"
+      learning_rate: 1e-5         # Conservative learning rate
+      weight_decay: 0.01          # Higher weight decay for regularization
+      betas: [0.9, 0.95]
+    
+    scheduler:
+      type: "cosine_warmup"
+      params:
+        warmup_epochs: 10
+        min_lr: 1e-6
+        max_lr: 1e-5
+
+  # Model 2: SegResNet - Robust configuration to prevent failures
+  segresnet_compact:
+    architecture: "segresnet"
+    params:
+      spatial_dims: 3
+      init_filters: 24            # Increased for better performance
+      in_channels: 4
+      out_channels: 1
+      dropout_prob: 0.05          # Very low dropout to prevent convergence issues
+      blocks_down: [1, 2, 2, 2]   # Simplified depth for stability
+      blocks_up: [1, 1, 1, 1]     # Fixed: Added one more upsampling stage to match downsampling
+      norm: "instance"            # Change to instance norm for better stability
+      use_conv_final: true
+      deep_supervision: false     # Disabled for stability
+    
+    loss:
+      type: "combo_loss_v2"
+      params:
+        dice_weight: 1.0
+        focal_weight: 0.3         # Reduced focal weight for stability
+        focal_gamma: 2.0
+        boundary_weight: 0.0
+    
+    optimizer:
+      type: "adamw"               
+      learning_rate: 1e-4         # Slightly higher for better convergence
+      weight_decay: 0.01
+      betas: [0.9, 0.999]
+    
+    scheduler:
+      type: "cosine_warmup"
+      params:
+        warmup_epochs: 10
+        min_lr: 1e-6
+        max_lr: 1e-4
+
+  # Model 3: Custom ResUNet - Robust configuration for stability
+  resunet_compact:
+    architecture: "residual_unet"
+    params:
+      in_channels: 4
+      out_channels: 1
+      features: [24, 48, 96, 192]     # Moderate capacity for CPU compatibility
+      dropout: 0.05                   # Very low dropout to prevent issues
+      attention_gates: true           # Keep attention gates for performance
+      deep_supervision: false         # Disable for stability
+      residual_connections: true
+      squeeze_excitation: false       # Keep disabled to save memory
+    
+    loss:
+      type: "combo_loss_v2"
+      params:
+        dice_weight: 1.0
+        focal_weight: 0.3           # Reduced for stability
+        focal_gamma: 2.0
+        boundary_weight: 0.0
+    
+    optimizer:
+      type: "adamw"                   
+      learning_rate: 1e-4             # Good learning rate for stable convergence
+      weight_decay: 0.01
+      betas: [0.9, 0.999]
+    
+    scheduler:
+      type: "cosine_warmup"
+      params:
+        warmup_epochs: 10
+        min_lr: 1e-6
+        max_lr: 1e-4
+
+  # Model 4: Multi-Scale UNet - Simplified for robustness and CPU compatibility
+  multiscale_compact:
+    architecture: "multiscale_unet"
+    params:
+      in_channels: 4
+      out_channels: 1
+      base_features: 20             # Conservative for CPU compatibility
+      growth_rate: 8                # Reduced for memory efficiency
+      num_layers: [2, 2, 3, 3]      # Simplified depth for stability
+      dropout: 0.05                 # Very low dropout
+      multiscale_features: false    # Disabled to prevent complexity issues
+      dense_connections: true       # Keep for gradient flow
+      deep_supervision: false       # Disabled for stability
+      pyramid_pooling: false        # Disabled to reduce memory usage
+    
+    loss:
+      type: "combo_loss_v2"
+      params:
+        dice_weight: 1.0
+        focal_weight: 0.3           # Reduced for stability
+        focal_gamma: 2.0
+        boundary_weight: 0.0
+    
+    optimizer:
+      type: "adamw"
+      learning_rate: 1e-4           # Higher LR for better convergence
+      weight_decay: 0.01
+      betas: [0.9, 0.999]
+    
+    scheduler:
+      type: "cosine_warmup"
+      params:
+        warmup_epochs: 10
+        min_lr: 1e-6
+        max_lr: 1e-4
+
+  # Model 5: SwinUNETR - SAVE FOR LAST (known working model)
+  swinunetr_compact:
+    architecture: "swinunetr"
+    params:
+      img_size: [96, 96, 96]      # Increased from 64³ for better performance, still CPU-friendly 
+      in_channels: 4
+      out_channels: 1
+      feature_size: 48            # Keep successful config feature size
+      use_checkpoint: true
+      spatial_dims: 3
+      depths: [2, 2, 6, 2]        # Standard SwinUNETR depths
+      num_heads: [3, 6, 12, 24]   # Standard SwinUNETR heads
+      window_size: [7, 7, 7]      # Standard window size
+      use_deep_supervision: true  # Keep deep supervision for better learning
+      drop_rate: 0.0              # Match successful config
+      attn_drop_rate: 0.0         # Match successful config  
+      dropout_path_rate: 0.0      # Match successful config
+    
+    # Load pretrained weights from successful model
+    pretrained_path: "C:/development/data/axon_ia/outputs/swinunetr/checkpoints/model_015.pth"
+    
+    loss:
+      type: "combo_loss_v2"        # Use combo loss like successful config
+      params:
+        dice_weight: 1.0          # Match successful config
+        focal_weight: 0.5         # Match successful config
+        focal_gamma: 2.0          # Match successful config
+        boundary_weight: 0.1      # Add small boundary loss for better edge detection
+    
+    optimizer:
+      type: "adamw"
+      learning_rate: 2e-4         # Increase from 1e-5 for better learning
+      weight_decay: 0.01          # Match successful config
+      betas: [0.9, 0.999]
+    
+    scheduler:
+      type: "cosine_warmup"
+      params:
+        warmup_epochs: 10         # Match successful config
+        min_lr: 1e-6              # Match successful config
+        max_lr: 2e-4              # Match increased learning rate
+
+# Ensemble configuration - Simplified
+ensemble:
+  voting_strategy: "soft"  # soft, hard, weighted
+  weights: "adaptive"  # equal, adaptive, learned
+  test_time_augmentation:
+    enabled: true     # Disabled to save computation time
+    n_tta: 4          # Reduced from 8
+    tta_types: ["flip"]  # Reduced augmentation types
+  
+  # Multi-scale testing - Disabled to save memory
+  multi_scale_testing:
+    enabled: false    # Disabled to save computation time
+    scales: [1.0]     # Only original scale
+  
+  # Post-processing - Simplified
+  post_processing:
+    remove_small_objects: true
+    min_object_size: 5        # Reduced from 10
+    fill_holes: false         # Disabled to save computation
+    morphological_closing: true  # Disabled to save computation
+
+# Data configuration - Heavily CPU optimized
+data:
+  # Actual directory structure:
+  # dataset_path/
+  #   ├── train/         # 334 patient folders
+  #   │   ├── 001/
+  #   │   │   ├── b0_001.nii.gz           # Training images
+  #   │   │   ├── b1000_001.nii.gz
+  #   │   │   ├── flair_001.nii.gz
+  #   │   │   ├── T2Star_001.nii.gz
+  #   │   │   ├── perfroi_001.nii.gz      # Target: brain lesions
+  #   │   │   └── eloquentareas_001.nii.gz # Target: eloquent areas
+  #   │   ├── 002/
+  #   │   │   ├── b0_002.nii.gz
+  #   │   │   └── ...
+  #   │   └── ...
+  #   └── test/          # 109 patient folders
+  #       └── ...
+  dataset_path: "C:/development/data/axon_ia"
+  
+  # Modality configuration
+  modalities: ["b0", "b1000", "flair", "T2Star"]  # Training images
+  target: "perfroi"  # Default target for brain lesion segmentation
+  # Alternative target: "eloquentareas" for eloquent area segmentation
+  
+  cache_rate: 0.0    # Disabled caching to save memory
+  num_workers: 1     # Reduced workers for CPU
+  pin_memory: false  # Disabled for CPU training
+  
+  # Preprocessing - Improved for better performance
+  preprocessing:
+    normalize_intensity: true
+    clip_intensity: [-3, 3]        # Use z-score range instead of absolute values
+    resample_spacing: [1.5, 1.5, 1.5]  # Higher resolution for better detail
+    roi_size: [96, 96, 96]         # Match improved image size
+    normalize_mode: "z_score"       # Use z-score normalization like successful model
+    
+  # Advanced sampling - Simplified
+  sampling:
+    foreground_ratio: 0.7
+    uniform_sampling: false
+    weighted_sampling: true
+    small_lesion_boost: 2.0
+
+# Logging and monitoring
+logging:
+  wandb:
+    enabled: false
+    project: "axon_ia_ensemble"
+    tags: ["ensemble", "small_lesions", "5fold_cv"]
+  
+  tensorboard:
+    enabled: true
+    log_dir: "logs/ensemble_v2"
+  
+  checkpointing:
+    save_top_k: 3
+    monitor: "val_dice"
+    mode: "max"
+    save_last: true
+
+# Hardware configuration - CPU only, ultra-conservative
+hardware:
+  gpus: 0          # No GPU usage
+  device: "cpu"    # Force CPU device
+  precision: "32"  # Full precision for CPU
+  mixed_precision: false  # Disabled for CPU
+  num_workers: 1   # Single worker to prevent overload
+  pin_memory: false  # Disabled for CPU training
+  strategy: "auto"
+  sync_batchnorm: false
