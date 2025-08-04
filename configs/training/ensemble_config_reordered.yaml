@@ -42,30 +42,30 @@ global:
       mosaic_probability: 0.1
       copy_paste_probability: 0.05
 
-  # Training parameters - More aggressive for better performance
+  # Training parameters - Optimized for RTX 4080 + 64GB RAM
   training:
-    max_epochs: 30
-    early_stopping_patience: 20  # Increased patience for convergence
-    batch_size: 1    # Keep at 1 for memory safety
-    accumulate_grad_batches: 6   # Increased to 6 for more stable gradients
-    precision: "32"  # Full precision for CPU
-    num_workers: 1   # Single worker to prevent CPU overload
-    pin_memory: false  # Disabled for CPU training
-    device: "cpu"    # Force CPU training
+    max_epochs: 200                 # Increased for better convergence
+    early_stopping_patience: 50     # Increased patience for thorough training
+    batch_size: 8                   # Significantly increased for GPU
+    accumulate_grad_batches: 1      # No need to accumulate with larger batch size
+    precision: "16-mixed"           # Mixed precision for faster training
+    num_workers: 8                  # Utilize more CPU cores
+    pin_memory: true                # Enable for GPU training
+    device: "cuda"                  # Use GPU
     
-    # Curriculum learning
+    # Curriculum learning - Enhanced for better training
     curriculum_learning:
       enabled: true   
-      warmup_epochs: 15  # Increased warmup
-      easy_samples_ratio: 0.6  # Start with easier samples
+      warmup_epochs: 30             # Increased warmup for better stability
+      easy_samples_ratio: 0.7       # Start with more easy samples
       difficulty_metric: "lesion_volume"
     
-    # Class balancing for small lesions
+    # Class balancing for small lesions - Enhanced
     class_balancing:
       enabled: true   
-      small_lesion_threshold: 150  # Slightly larger threshold
-      small_lesion_boost: 3.0      # Increased boost for small lesions
-      hard_negative_mining: false  # Disable to reduce memory usage
+      small_lesion_threshold: 100   # Lower threshold for better small lesion detection
+      small_lesion_boost: 4.0       # Increased boost for small lesions
+      hard_negative_mining: true    # Enable with more memory available
 
 # Model configurations - REORDERED TO TEST FIXES FIRST
 models:
@@ -73,20 +73,20 @@ models:
   unetr_compact:
     architecture: "unetr"
     params:
-      img_size: [96, 96, 96]      # Keep the more powerful 96³ size
+      img_size: [128, 128, 128]     # Increased to 128³ for better detail capture
       in_channels: 4
       out_channels: 1
-      feature_size: 24            # Increase back for better performance  
-      hidden_size: 384            # Increase for better capacity (384/12=32)
-      mlp_dim: 1536               # Increase proportionally 
-      num_heads: 12
-      patch_size: 16              # 96/16 = 6, so 6³ = 216 patches
-      pos_embed: "learnable"      # Use learnable embeddings - will auto-size to 216 patches
+      feature_size: 32              # Increased for better performance  
+      hidden_size: 516              # Increased for better capacity (divisible by 6 for pos embedding)
+      mlp_dim: 2064                 # Increased proportionally (516 * 4) 
+      num_heads: 16                 # Increased number of attention heads
+      patch_size: 16                # 128/16 = 8, so 8³ = 512 patches
+      pos_embed: "learnable"        # Use learnable embeddings
       norm_name: "instance"
       conv_block: true
       res_block: true
-      dropout_rate: 0.0           # No dropout for better learning
-      use_deep_supervision: false # Keep disabled for compatibility
+      dropout_rate: 0.1             # Add some dropout for regularization
+      use_deep_supervision: true    # Re-enable for better learning
     
     loss:
       type: "combo_loss_v2"        # Consistent loss function
@@ -98,31 +98,31 @@ models:
     
     optimizer:
       type: "adamw"
-      learning_rate: 1e-5         # Conservative learning rate
-      weight_decay: 0.01          # Higher weight decay for regularization
+      learning_rate: 5e-5           # Increased learning rate for faster convergence
+      weight_decay: 0.01            
       betas: [0.9, 0.95]
     
     scheduler:
       type: "cosine_warmup"
       params:
-        warmup_epochs: 10
+        warmup_epochs: 30           # Match curriculum learning warmup
         min_lr: 1e-6
-        max_lr: 1e-5
+        max_lr: 5e-5
 
   # Model 2: SegResNet - Robust configuration to prevent failures
   segresnet_compact:
     architecture: "segresnet"
     params:
       spatial_dims: 3
-      init_filters: 24            # Increased for better performance
+      init_filters: 32              # Increased for better performance
       in_channels: 4
       out_channels: 1
-      dropout_prob: 0.05          # Very low dropout to prevent convergence issues
-      blocks_down: [1, 2, 2, 2]   # Simplified depth for stability
-      blocks_up: [1, 1, 1, 1]     # Fixed: Added one more upsampling stage to match downsampling
-      norm: "instance"            # Change to instance norm for better stability
+      dropout_prob: 0.1             # Increased dropout for regularization
+      blocks_down: [2, 3, 4, 4]     # Increased depth for better feature extraction
+      blocks_up: [2, 2, 2, 2]       # Matched upsampling stages
+      norm: "batch"                 # Switch to batch norm for GPU training
       use_conv_final: true
-      deep_supervision: false     # Disabled for stability
+      deep_supervision: true        # Re-enable for better learning
     
     loss:
       type: "combo_loss_v2"
@@ -134,16 +134,16 @@ models:
     
     optimizer:
       type: "adamw"               
-      learning_rate: 1e-4         # Slightly higher for better convergence
+      learning_rate: 2e-4           # Increased learning rate
       weight_decay: 0.01
       betas: [0.9, 0.999]
     
     scheduler:
       type: "cosine_warmup"
       params:
-        warmup_epochs: 10
+        warmup_epochs: 30           # Match curriculum learning
         min_lr: 1e-6
-        max_lr: 1e-4
+        max_lr: 2e-4
 
   # Model 3: Custom ResUNet - Robust configuration for stability
   resunet_compact:
@@ -151,12 +151,12 @@ models:
     params:
       in_channels: 4
       out_channels: 1
-      features: [24, 48, 96, 192]     # Moderate capacity for CPU compatibility
-      dropout: 0.05                   # Very low dropout to prevent issues
-      attention_gates: true           # Keep attention gates for performance
-      deep_supervision: false         # Disable for stability
+      features: [32, 64, 128, 256, 512]  # Increased capacity for better performance
+      dropout: 0.1                      # Increased dropout for regularization
+      attention_gates: true             # Keep attention gates for performance
+      deep_supervision: true            # Re-enable for better learning
       residual_connections: true
-      squeeze_excitation: false       # Keep disabled to save memory
+      squeeze_excitation: true          # Re-enable with more GPU memory
     
     loss:
       type: "combo_loss_v2"
@@ -168,16 +168,16 @@ models:
     
     optimizer:
       type: "adamw"                   
-      learning_rate: 1e-4             # Good learning rate for stable convergence
+      learning_rate: 2e-4             # Increased learning rate
       weight_decay: 0.01
       betas: [0.9, 0.999]
     
     scheduler:
       type: "cosine_warmup"
       params:
-        warmup_epochs: 10
+        warmup_epochs: 30             # Match curriculum learning
         min_lr: 1e-6
-        max_lr: 1e-4
+        max_lr: 2e-4
 
   # Model 4: Multi-Scale UNet - Simplified for robustness and CPU compatibility
   multiscale_compact:
@@ -185,14 +185,14 @@ models:
     params:
       in_channels: 4
       out_channels: 1
-      base_features: 20             # Conservative for CPU compatibility
-      growth_rate: 8                # Reduced for memory efficiency
-      num_layers: [2, 2, 3, 3]      # Simplified depth for stability
-      dropout: 0.05                 # Very low dropout
-      multiscale_features: false    # Disabled to prevent complexity issues
-      dense_connections: true       # Keep for gradient flow
-      deep_supervision: false       # Disabled for stability
-      pyramid_pooling: false        # Disabled to reduce memory usage
+      base_features: 32               # Increased for better performance
+      growth_rate: 16                 # Increased for better feature extraction
+      num_layers: [3, 4, 6, 8]        # Increased depth for better learning
+      dropout: 0.1                    # Increased dropout for regularization
+      multiscale_features: true       # Re-enable with more GPU memory
+      dense_connections: true         # Keep for gradient flow
+      deep_supervision: true          # Re-enable for better learning
+      pyramid_pooling: true           # Re-enable with more memory
     
     loss:
       type: "combo_loss_v2"
@@ -204,34 +204,34 @@ models:
     
     optimizer:
       type: "adamw"
-      learning_rate: 1e-4           # Higher LR for better convergence
+      learning_rate: 2e-4           # Increased learning rate
       weight_decay: 0.01
       betas: [0.9, 0.999]
     
     scheduler:
       type: "cosine_warmup"
       params:
-        warmup_epochs: 10
+        warmup_epochs: 30           # Match curriculum learning
         min_lr: 1e-6
-        max_lr: 1e-4
+        max_lr: 2e-4
 
   # Model 5: SwinUNETR - SAVE FOR LAST (known working model)
   swinunetr_compact:
     architecture: "swinunetr"
     params:
-      img_size: [96, 96, 96]      # Increased from 64³ for better performance, still CPU-friendly 
+      img_size: [128, 128, 128]     # Increased to 128³ for better detail
       in_channels: 4
       out_channels: 1
-      feature_size: 48            # Keep successful config feature size
+      feature_size: 64              # Increased feature size
       use_checkpoint: true
       spatial_dims: 3
-      depths: [2, 2, 6, 2]        # Standard SwinUNETR depths
-      num_heads: [3, 6, 12, 24]   # Standard SwinUNETR heads
-      window_size: [7, 7, 7]      # Standard window size
-      use_deep_supervision: true  # Keep deep supervision for better learning
-      drop_rate: 0.0              # Match successful config
-      attn_drop_rate: 0.0         # Match successful config  
-      dropout_path_rate: 0.0      # Match successful config
+      depths: [2, 2, 6, 2]          # Standard SwinUNETR depths
+      num_heads: [3, 6, 12, 24]     # Standard SwinUNETR heads
+      window_size: [7, 7, 7]        # Standard window size
+      use_deep_supervision: true    # Keep deep supervision for better learning
+      drop_rate: 0.1                # Add dropout for regularization
+      attn_drop_rate: 0.1           # Add attention dropout
+      dropout_path_rate: 0.1        # Add path dropout
     
     # Load pretrained weights from successful model
     pretrained_path: "C:/development/data/axon_ia/outputs/swinunetr/checkpoints/model_015.pth"
@@ -246,37 +246,37 @@ models:
     
     optimizer:
       type: "adamw"
-      learning_rate: 2e-4         # Increase from 1e-5 for better learning
-      weight_decay: 0.01          # Match successful config
+      learning_rate: 3e-4           # Increased learning rate for SwinUNETR
+      weight_decay: 0.01            
       betas: [0.9, 0.999]
     
     scheduler:
       type: "cosine_warmup"
       params:
-        warmup_epochs: 10         # Match successful config
-        min_lr: 1e-6              # Match successful config
-        max_lr: 2e-4              # Match increased learning rate
+        warmup_epochs: 30           # Match curriculum learning
+        min_lr: 1e-6              
+        max_lr: 3e-4              # Match increased learning rate
 
 # Ensemble configuration - Simplified
 ensemble:
   voting_strategy: "soft"  # soft, hard, weighted
   weights: "adaptive"  # equal, adaptive, learned
   test_time_augmentation:
-    enabled: true     # Disabled to save computation time
-    n_tta: 4          # Reduced from 8
-    tta_types: ["flip"]  # Reduced augmentation types
+    enabled: true
+    n_tta: 8                    # Increased TTA for better performance
+    tta_types: ["flip", "rotate", "scale"]  # More augmentation types
   
-  # Multi-scale testing - Disabled to save memory
+  # Multi-scale testing - Re-enabled with GPU power
   multi_scale_testing:
-    enabled: false    # Disabled to save computation time
-    scales: [1.0]     # Only original scale
+    enabled: true               # Re-enabled for better performance
+    scales: [0.85, 1.0, 1.15]   # Multiple scales for better detection
   
-  # Post-processing - Simplified
+  # Post-processing - Enhanced
   post_processing:
     remove_small_objects: true
-    min_object_size: 5        # Reduced from 10
-    fill_holes: false         # Disabled to save computation
-    morphological_closing: true  # Disabled to save computation
+    min_object_size: 3          # Reduced for better small lesion detection
+    fill_holes: true            # Re-enabled
+    morphological_closing: true # Re-enabled
 
 # Data configuration - Heavily CPU optimized
 data:
@@ -303,24 +303,24 @@ data:
   target: "perfroi"  # Default target for brain lesion segmentation
   # Alternative target: "eloquentareas" for eloquent area segmentation
   
-  cache_rate: 0.0    # Disabled caching to save memory
-  num_workers: 1     # Reduced workers for CPU
-  pin_memory: false  # Disabled for CPU training
+  cache_rate: 0.3      # Enable caching with more RAM
+  num_workers: 8       # Increased workers for faster data loading
+  pin_memory: true     # Enable for GPU training
   
-  # Preprocessing - Improved for better performance
+  # Preprocessing - Enhanced for better performance
   preprocessing:
     normalize_intensity: true
-    clip_intensity: [-3, 3]        # Use z-score range instead of absolute values
-    resample_spacing: [1.5, 1.5, 1.5]  # Higher resolution for better detail
-    roi_size: [96, 96, 96]         # Match improved image size
-    normalize_mode: "z_score"       # Use z-score normalization like successful model
+    clip_intensity: [-3, 3]        
+    resample_spacing: [1.0, 1.0, 1.0]  # Higher resolution for better detail
+    roi_size: [128, 128, 128]           # Match increased image size
+    normalize_mode: "z_score"       
     
-  # Advanced sampling - Simplified
+  # Advanced sampling - Enhanced
   sampling:
-    foreground_ratio: 0.7
+    foreground_ratio: 0.8           # Increased foreground sampling
     uniform_sampling: false
     weighted_sampling: true
-    small_lesion_boost: 2.0
+    small_lesion_boost: 3.0         # Increased boost for small lesions
 
 # Logging and monitoring
 logging:
@@ -339,13 +339,13 @@ logging:
     mode: "max"
     save_last: true
 
-# Hardware configuration - CPU only, ultra-conservative
+# Hardware configuration - Optimized for RTX 4080 + 64GB RAM
 hardware:
-  gpus: 0          # No GPU usage
-  device: "cpu"    # Force CPU device
-  precision: "32"  # Full precision for CPU
-  mixed_precision: false  # Disabled for CPU
-  num_workers: 1   # Single worker to prevent overload
-  pin_memory: false  # Disabled for CPU training
+  gpus: 1              # Use 1 GPU (RTX 4080)
+  device: "cuda"       # Use CUDA
+  precision: "16-mixed" # Mixed precision for faster training
+  mixed_precision: true # Enable mixed precision
+  num_workers: 8       # Utilize more CPU cores
+  pin_memory: true     # Enable for GPU training
   strategy: "auto"
-  sync_batchnorm: false
+  sync_batchnorm: true # Enable sync batch norm for better training

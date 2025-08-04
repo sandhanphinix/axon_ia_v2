@@ -177,7 +177,7 @@ class AxonDataset(Dataset):
         # Load modalities and normalize shapes
         from monai.transforms import Resize
         import torch
-        target_size = (96, 96, 96)  # Updated to 96³ to match UNETR model expectations
+        target_size = (128, 128, 128)  # Updated to 128³ to match improved GPU model expectations
         
         modality_arrays = []
         

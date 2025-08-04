@@ -27,6 +27,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, SubsetRandomSampler
 import torch.nn.functional as F
+from torch.cuda.amp import GradScaler, autocast
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 from tqdm import tqdm
@@ -166,6 +167,16 @@ class EnsembleTrainer:
         self.best_metrics = defaultdict(float)
         self.curriculum = None
         self.small_lesion_sampler = None
+        
+        # Setup mixed precision training
+        precision = config.get('global', {}).get('training', {}).get('precision', '32')
+        self.use_mixed_precision = precision == "16-mixed" and self.device.type == 'cuda'
+        if self.use_mixed_precision:
+            self.scaler = GradScaler()
+            print("[GPU] Mixed precision training enabled")
+        else:
+            self.scaler = None
+            print(f"[PRECISION] Using {precision} precision")
         
         # Setup curriculum learning
         curriculum_config = config.get('global', {}).get('training', {}).get('curriculum_learning', {})
@@ -462,10 +473,19 @@ class EnsembleTrainer:
                 masks = batch['mask'].to(self.device)
                 
                 optimizer.zero_grad()
-                outputs = model(images)
-                loss = criterion(outputs, masks)
-                loss.backward()
-                optimizer.step()
+                
+                if self.use_mixed_precision:
+                    with autocast():
+                        outputs = model(images)
+                        loss = criterion(outputs, masks)
+                    self.scaler.scale(loss).backward()
+                    self.scaler.step(optimizer)
+                    self.scaler.update()
+                else:
+                    outputs = model(images)
+                    loss = criterion(outputs, masks)
+                    loss.backward()
+                    optimizer.step()
                 
                 # Compute metrics
                 with torch.no_grad():
